@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+
+# Entornos y secretos
+venv/
+.env
+.env.*
+!.env.example
+
+# Django
+db.sqlite3
+*.log
+media/
+staticfiles/
+
+# macOS
+.DS_Store
+
+# VSCode
+.vscode/
+
