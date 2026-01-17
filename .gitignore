@@ -1,5 +1,65 @@
 # Python
 __pycache__/
+*.py[cod]
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtualenv
+venv/
+.env/
+.env.*
+
+# Django
+*.log
+db.sqlite3
+staticfiles/
+media/
+
+# Mac
+.DS_Store
+
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+
+# Migrations (opcional: normalmente sí se suben)
+# **NO lo ignores** si trabajas con Django en equipo
+# */migrations/*.py
+# !*/migrations/__init__.py
+*.pyo
+*.pyd
+
+# Virtualenv
+venv/
+.env/
+.env.*
+
+# Django
+*.log
+db.sqlite3
+staticfiles/
+media/
+
+# Mac
+.DS_Store
+
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+
+# Migrations (opcional: normalmente sí se suben)
+# **NO lo ignores** si trabajas con Django en equipo
+# */migrations/*.py
+# !*/migrations/__init__.py
+# Python
+__pycache__/
 *.pyc
 
 # Entornos y secretos
@@ -20,3 +80,10 @@ staticfiles/
 # VSCode
 .vscode/
 
+# PyCharm
+.idea/
+
+# Migrations (opcional: normalmente sí se suben)
+# **NO lo ignores** si trabajas con Django en equipo
+# */migrations/*.py
+# !*/migrations/__init__.py
