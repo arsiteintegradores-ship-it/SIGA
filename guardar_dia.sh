@@ -1,7 +1,3 @@
-chmod +x "✅ Dando permisos para guardar 😴"
-
-
-
 #!/bin/bash
 
 # Fecha y hora para el mensaje de commit
