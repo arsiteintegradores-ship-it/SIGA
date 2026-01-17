@@ -306,9 +306,15 @@ class GanadoAnimalAdmin(admin.ModelAdmin):
 
     list_display = (
         "id", "id_interno", "id_siniga", "nombre_bov", "sexo",
+        "etapa_desarrollo", "edad_dias",  
         "raza", "finca", "lote", "estado",
         "fecha_nacimiento", "peso_nacimiento", "peso_destete",
+        "edad", "etapa_desarrollo",
+
+    
     )
+    
+    
     search_fields = (
         "id_interno", "id_siniga", "nombre_bov",
         "raza__raza", "color__color",
