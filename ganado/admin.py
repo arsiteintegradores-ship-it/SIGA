@@ -1,12 +1,9 @@
+from datetime import timedelta
 
-# Register your models here.
-
-from datetime import date, timedelta
+from django import forms
 from django.contrib import admin
 from django.http import HttpResponse
 from django.utils import timezone
-from django import forms
-
 
 from .models import (
     GanadoAnimal, GanadoFinca, GanadoLote,
@@ -56,7 +53,6 @@ class PesoNacimientoFilter(admin.SimpleListFilter):
     title = "Peso nacimiento (kg)"
     parameter_name = "pn_rango"
 
-    # Ajusta rangos a tu rancho si quieres
     def lookups(self, request, model_admin):
         return (
             ("0-25", "0 a 25"),
@@ -82,7 +78,6 @@ class PesoDesteteFilter(admin.SimpleListFilter):
     title = "Peso destete (kg)"
     parameter_name = "pd_rango"
 
-    # Ajusta rangos a tu rancho si quieres
     def lookups(self, request, model_admin):
         return (
             ("0-150", "0 a 150"),
@@ -110,7 +105,7 @@ class PesoDesteteFilter(admin.SimpleListFilter):
 def export_animales_xlsx(modeladmin, request, queryset):
     """
     Exporta animales seleccionados a XLSX.
-    Requiere openpyxl (ya lo instalaste si usas pandas/openpyxl).
+    Incluye Edad (texto) y Etapa de desarrollo.
     """
     try:
         from openpyxl import Workbook
@@ -128,18 +123,23 @@ def export_animales_xlsx(modeladmin, request, queryset):
     headers = [
         "ID", "Id interno", "Id SINIGA", "Nombre", "Sexo",
         "Raza", "Color", "Finca", "Lote", "Estado",
-        "Fecha nac", "Peso nac", "Peso destete",
+        "Fecha nac",
+        "Edad (Años, Meses, Días)", "Etapa de desarrollo",
+        "Peso nac", "Peso destete",
         "Padre", "Madre", "Productor", "UPP", "Notas",
         "Creado", "Actualizado",
     ]
     ws.append(headers)
 
-    # Optimiza consultas para FKs
     queryset = queryset.select_related(
         "raza", "color", "finca", "lote", "padre", "madre", "productor", "upp"
     )
 
     for a in queryset:
+        # OJO: usar 'edad' (texto). NO usar 'edad_amd' (tupla).
+        edad_txt = str(getattr(a, "edad", "") or "")
+        etapa_txt = str(getattr(a, "etapa_desarrollo", "") or "")
+
         ws.append([
             a.id,
             a.id_interno,
@@ -152,6 +152,8 @@ def export_animales_xlsx(modeladmin, request, queryset):
             str(a.lote) if a.lote_id else "",
             a.estado,
             a.fecha_nacimiento.isoformat() if a.fecha_nacimiento else "",
+            edad_txt,
+            etapa_txt,
             float(a.peso_nacimiento) if a.peso_nacimiento is not None else "",
             float(a.peso_destete) if a.peso_destete is not None else "",
             str(a.padre) if a.padre_id else "",
@@ -181,12 +183,11 @@ def set_estado(estado):
         queryset.update(estado=estado)
 
     _action.short_description = f"Marcar como {estado}"
-    _action.__name__ = f"marcar_{estado.lower()}"  # ✅ nombre único para Django
+    _action.__name__ = f"marcar_{estado.lower()}"
     return _action
 
 
 class GanadoAnimalAdminForm(forms.ModelForm):
-    
     class Meta:
         model = GanadoAnimal
         fields = "__all__"
@@ -194,11 +195,9 @@ class GanadoAnimalAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Filtrar lote por finca (cuando se edita)
         if self.instance and self.instance.finca_id:
             self.fields["lote"].queryset = GanadoLote.objects.filter(finca_id=self.instance.finca_id)
         else:
-            # En alta nueva: no mostrar todos los lotes
             self.fields["lote"].queryset = GanadoLote.objects.none()
 
     def clean(self):
@@ -210,23 +209,18 @@ class GanadoAnimalAdminForm(forms.ModelForm):
         padre = cleaned.get("padre")
         madre = cleaned.get("madre")
 
-        # 1) Fecha no futura
         if fecha_nacimiento and fecha_nacimiento > timezone.localdate():
             self.add_error("fecha_nacimiento", "La fecha de nacimiento no puede ser futura.")
 
-        # 2) Lote debe pertenecer a la finca
         if finca and lote and lote.finca_id != finca.id:
             self.add_error("lote", "Ese lote no pertenece a la finca seleccionada.")
 
-        # 3) Padre debe ser macho
         if padre and getattr(padre, "sexo", None) and padre.sexo != "M":
             self.add_error("padre", "El PADRE debe ser sexo 'M' (macho).")
 
-        # 4) Madre debe ser hembra
         if madre and getattr(madre, "sexo", None) and madre.sexo != "H":
             self.add_error("madre", "La MADRE debe ser sexo 'H' (hembra).")
 
-        # 5) No se puede poner a sí mismo como padre/madre
         if self.instance and self.instance.pk:
             if padre and padre.pk == self.instance.pk:
                 self.add_error("padre", "Un animal no puede ser su propio padre.")
@@ -234,8 +228,6 @@ class GanadoAnimalAdminForm(forms.ModelForm):
                 self.add_error("madre", "Un animal no puede ser su propia madre.")
 
         return cleaned
-
-
 
 
 # =========================
@@ -301,34 +293,32 @@ class GanadoRegistroAdmin(admin.ModelAdmin):
 # =========================
 @admin.register(GanadoAnimal)
 class GanadoAnimalAdmin(admin.ModelAdmin):
-        
     form = GanadoAnimalAdminForm
 
     list_display = (
         "id", "id_interno", "id_siniga", "nombre_bov", "sexo",
-        "etapa_desarrollo", "edad_dias",  
-        "raza", "finca", "lote", "estado",
-        "fecha_nacimiento", "peso_nacimiento", "peso_destete",
-        "edad", "etapa_desarrollo",
-
-    
+        "fecha_nacimiento", "edad", "etapa_desarrollo",
+        "raza", "color", "finca", "lote", "estado",
+        "peso_nacimiento", "peso_destete",
+        "created_at", "updated_at",
     )
-    
-    
+
     search_fields = (
         "id_interno", "id_siniga", "nombre_bov",
         "raza__raza", "color__color",
         "finca__nombre", "lote__nombre",
     )
+
     list_filter = (
         "sexo", "estado", "raza", "color", "finca", "lote",
         FechaNacimientoFilter, PesoNacimientoFilter, PesoDesteteFilter
     )
+
     ordering = ("-id",)
 
     autocomplete_fields = ("productor", "upp", "color", "raza", "registro", "finca", "lote", "padre", "madre")
 
-    readonly_fields = ("created_at", "updated_at")
+    readonly_fields = ("edad", "etapa_desarrollo", "created_at", "updated_at")
 
     actions = [
         set_estado("ACTIVO"),
@@ -343,6 +333,7 @@ class GanadoAnimalAdmin(admin.ModelAdmin):
         ("Origen / Ubicación", {"fields": ("finca", "lote", "productor", "upp")}),
         ("Características", {"fields": ("raza", "color", "estado", "notas")}),
         ("Pesos / Fechas", {"fields": ("fecha_nacimiento", "peso_nacimiento", "peso_destete")}),
+        ("Edad / Etapa (calculado)", {"fields": ("edad", "etapa_desarrollo")}),
         ("Genealogía", {"fields": ("padre", "madre", "registro")}),
         ("Sistema", {"fields": ("created_at", "updated_at")}),
     )

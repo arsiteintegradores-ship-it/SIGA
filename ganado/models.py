@@ -175,10 +175,11 @@ class GanadoAnimal(models.Model):
     # -----------------------------
     @property
     def edad_dias(self):
-        """Edad en días (int) o None si no hay fecha."""
+        """Edad en días (int) o None si no hay fecha o si es futura."""
         if not self.fecha_nacimiento:
             return None
-        return (timezone.localdate() - self.fecha_nacimiento).days
+        dias = (timezone.localdate() - self.fecha_nacimiento).days
+        return dias if dias >= 0 else None
 
     # -----------------------------
     # ETAPA DE DESARROLLO
@@ -220,7 +221,7 @@ class GanadoAnimal(models.Model):
     @property
     def edad_amd(self):
         """
-        Devuelve (años, meses, días) exactos.
+        Devuelve (años, meses, días) exactos como tupla.
         Ej: (2, 3, 12)
         """
         if not self.fecha_nacimiento:
@@ -256,7 +257,7 @@ class GanadoAnimal(models.Model):
 
     @property
     def edad(self):
-        """Ej: '2 años, 3 meses, 12 días'."""
+        """Texto: '2 años, 3 meses, 12 días'."""
         amd = self.edad_amd
         if not amd:
             return "SIN_FECHA"
