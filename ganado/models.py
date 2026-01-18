@@ -1,10 +1,20 @@
 # ganado/models.py
 
-import calendar
-from datetime import date
-
 from django.db import models
+from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.utils import timezone
+
+from .utils import (
+    calculate_age_amd,
+    calculate_age_days,
+    etapa_desarrollo_from_dias,
+    format_age,
+    get_weight_limit,
+    normalize_identifier,
+    validate_identifier,
+    validate_weight,
+)
 
 
 class GanadoFinca(models.Model):
@@ -170,96 +180,101 @@ class GanadoAnimal(models.Model):
     def __str__(self):
         return self.id_interno or self.id_siniga or f"Animal #{self.id}"
 
+    def clean(self):
+        errors = {}
+        today = timezone.localdate()
+
+        if self.fecha_nacimiento and self.fecha_nacimiento > today:
+            errors["fecha_nacimiento"] = "La fecha de nacimiento no puede ser futura."
+
+        # --- Identificadores (normalizar + validar + duplicados case-insensitive)
+        normalized_interno = normalize_identifier(self.id_interno)
+        if normalized_interno:
+            try:
+                validate_identifier(normalized_interno, "El ID interno")
+            except ValidationError as exc:
+                errors["id_interno"] = exc.messages
+            else:
+                dup = GanadoAnimal.objects.filter(id_interno__iexact=normalized_interno)
+                if self.pk:
+                    dup = dup.exclude(pk=self.pk)
+                if dup.exists():
+                    errors["id_interno"] = "Ya existe un animal con este ID interno."
+
+        normalized_siniga = normalize_identifier(self.id_siniga)
+        if normalized_siniga:
+            try:
+                validate_identifier(normalized_siniga, "El ID SINIGA")
+            except ValidationError as exc:
+                errors["id_siniga"] = exc.messages
+            else:
+                dup = GanadoAnimal.objects.filter(id_siniga__iexact=normalized_siniga)
+                if self.pk:
+                    dup = dup.exclude(pk=self.pk)
+                if dup.exists():
+                    errors["id_siniga"] = "Ya existe un animal con este ID SINIGA."
+
+        # --- Pesos (límites configurables en settings)
+        peso_nac_max = get_weight_limit("GANADO_PESO_NACIMIENTO_MAX", 80)
+        peso_destete_max = get_weight_limit("GANADO_PESO_DESTETE_MAX", 400)
+
+        try:
+            validate_weight(self.peso_nacimiento, "El peso al nacimiento", peso_nac_max)
+        except ValidationError as exc:
+            errors["peso_nacimiento"] = exc.messages
+
+        try:
+            validate_weight(self.peso_destete, "El peso al destete", peso_destete_max)
+        except ValidationError as exc:
+            errors["peso_destete"] = exc.messages
+
+        # --- Genealogía
+        # (Nota: si el objeto aún no está guardado, self.pk puede ser None)
+        if self.pk and self.madre_id and self.madre_id == self.pk:
+            errors["madre"] = "La madre no puede ser el mismo animal."
+        if self.pk and self.padre_id and self.padre_id == self.pk:
+            errors["padre"] = "El padre no puede ser el mismo animal."
+        if self.padre_id and self.madre_id and self.padre_id == self.madre_id:
+            errors["padre"] = "Padre y madre no pueden ser el mismo animal."
+            errors["madre"] = "Padre y madre no pueden ser el mismo animal."
+
+        if self.padre_id and self.padre and self.padre.sexo != "M":
+            errors["padre"] = "El padre debe ser macho."
+        if self.madre_id and self.madre and self.madre.sexo != "H":
+            errors["madre"] = "La madre debe ser hembra."
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        # Normaliza identificadores antes de guardar.
+        self.id_interno = normalize_identifier(self.id_interno)
+        self.id_siniga = normalize_identifier(self.id_siniga)
+        super().save(*args, **kwargs)
+
     # -----------------------------
-    # EDAD EN DIAS
+    # EDAD EN DÍAS
     # -----------------------------
     @property
     def edad_dias(self):
         """Edad en días (int) o None si no hay fecha o si es futura."""
-        if not self.fecha_nacimiento:
-            return None
-        dias = (timezone.localdate() - self.fecha_nacimiento).days
-        return dias if dias >= 0 else None
+        return calculate_age_days(self.fecha_nacimiento)
 
     # -----------------------------
     # ETAPA DE DESARROLLO
     # -----------------------------
     @property
     def etapa_desarrollo(self):
-        """
-        Reglas:
-        1-210  => Lactantes
-        211-365 => Crias
-        366-730 => Hembra: Vaquilla / Macho: Novillo
-        >730 => Macho: Semental / Hembra: Vaca
-        """
-        edad = self.edad_dias
-        if edad is None:
-            return "SIN_FECHA"
-        if edad <= 0:
-            return "REVISAR_FECHA"
-
-        if 1 <= edad <= 210:
-            return "Lactantes"
-        if 211 <= edad <= 365:
-            return "Crias"
-        if 366 <= edad <= 730:
-            return "Vaquilla" if self.sexo == "H" else "Novillo"
-        return "Vaca" if self.sexo == "H" else "Semental"
+        return etapa_desarrollo_from_dias(self.edad_dias, self.sexo)
 
     # -----------------------------
-    # EDAD EN AÑOS / MESES / DIAS (exacto)
+    # EDAD EN AÑOS / MESES / DÍAS (exacto)
     # -----------------------------
-    def _add_months(self, d: date, months: int) -> date:
-        """Suma meses a una fecha respetando el fin de mes."""
-        y = d.year + (d.month - 1 + months) // 12
-        m = (d.month - 1 + months) % 12 + 1
-        last_day = calendar.monthrange(y, m)[1]
-        day = min(d.day, last_day)
-        return date(y, m, day)
-
     @property
     def edad_amd(self):
-        """
-        Devuelve (años, meses, días) exactos como tupla.
-        Ej: (2, 3, 12)
-        """
-        if not self.fecha_nacimiento:
-            return None
-
-        today = timezone.localdate()
-        b = self.fecha_nacimiento
-
-        if b > today:
-            return None
-
-        # Años completos
-        years = today.year - b.year
-        if (today.month, today.day) < (b.month, b.day):
-            years -= 1
-
-        # Base = nacimiento + years (cuidando fin de mes)
-        base_year = b.year + years
-        base_day = min(b.day, calendar.monthrange(base_year, b.month)[1])
-        base = date(base_year, b.month, base_day)
-
-        # Meses completos desde base
-        months = (today.year - base.year) * 12 + (today.month - base.month)
-        if today.day < base.day:
-            months -= 1
-
-        base2 = self._add_months(base, months)
-
-        # Días restantes
-        days = (today - base2).days
-
-        return years, months, days
+        return calculate_age_amd(self.fecha_nacimiento)
 
     @property
     def edad(self):
-        """Texto: '2 años, 3 meses, 12 días'."""
-        amd = self.edad_amd
-        if not amd:
-            return "SIN_FECHA"
-        a, m, d = amd
-        return f"{a} años, {m} meses, {d} días"
+        """Texto: 'X años, Y meses, Z días'."""
+        return format_age(self.edad_amd)

@@ -1,24 +1,33 @@
 from datetime import timedelta
-from django.contrib.admin.widgets import AdminDateWidget
+
 from django import forms
 from django.contrib import admin
+from django.contrib.admin.widgets import AdminDateWidget
 from django.http import HttpResponse
 from django.utils import timezone
+
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import cm
 
-
 from .models import (
-    GanadoAnimal, GanadoFinca, GanadoLote,
-    GanadoRaza, GanadoColor, GanadoProductor,
-    GanadoUpp, GanadoRegistro,
+    GanadoAnimal,
+    GanadoFinca,
+    GanadoLote,
+    GanadoRaza,
+    GanadoColor,
+    GanadoProductor,
+    GanadoUpp,
+    GanadoRegistro,
 )
+from .utils import normalize_identifier
+
 
 admin.site.site_header = "SIGA - Administración"
 admin.site.site_title = "SIGA Admin"
-admin.site.index_title = "Captura guiada (recomendado): 1) Animal  2) Productores/UPP  3) Fincas  4) Lotes 5) Razas/Colores"
-
+admin.site.index_title = (
+    "Captura guiada (recomendado): 1) Animal  2) Productores/UPP  3) Fincas  4) Lotes 5) Razas/Colores"
+)
 
 # =========================
 # Filtros por rango (sin paquetes)
@@ -140,7 +149,6 @@ def export_animales_xlsx(modeladmin, request, queryset):
     )
 
     for a in queryset:
-        # OJO: usar 'edad' (texto). NO usar 'edad_amd' (tupla).
         edad_txt = str(getattr(a, "edad", "") or "")
         etapa_txt = str(getattr(a, "etapa_desarrollo", "") or "")
 
@@ -190,25 +198,21 @@ def imprimir_reporte_animales_pdf(modeladmin, request, queryset):
     c = canvas.Canvas(response, pagesize=letter)
     width, height = letter
 
-    # Estilos básicos
     margin_x = 1.5 * cm
     y = height - 2 * cm
     line_h = 14
 
-    # Título
     c.setFont("Helvetica-Bold", 14)
     c.drawString(margin_x, y, "SIGA - Reporte de Animales")
     y -= 18
 
-    # Fecha
     c.setFont("Helvetica", 10)
     c.drawString(margin_x, y, f"Fecha: {timezone.localdate().isoformat()}")
     y -= 18
 
-    # Encabezados de tabla
     c.setFont("Helvetica-Bold", 9)
     headers = ["ID", "ID interno", "Nombre", "Sexo", "F. Nac", "Edad", "Etapa", "Finca", "Lote", "Estado"]
-    cols = [35, 70, 110, 35, 55, 95, 80, 90, 70, 55]  # anchos aprox
+    cols = [35, 70, 110, 35, 55, 95, 80, 90, 70, 55]
     x = margin_x
 
     for h, w in zip(headers, cols):
@@ -219,9 +223,7 @@ def imprimir_reporte_animales_pdf(modeladmin, request, queryset):
     c.line(margin_x, y, width - margin_x, y)
     y -= 14
 
-    # Optimiza FKs
     queryset = queryset.select_related("finca", "lote")
-
     c.setFont("Helvetica", 8)
 
     def nueva_pagina():
@@ -249,14 +251,13 @@ def imprimir_reporte_animales_pdf(modeladmin, request, queryset):
         if y < 2.2 * cm:
             nueva_pagina()
 
-        # datos
         fila = [
             str(a.id),
             str(a.id_interno or ""),
             str(a.nombre_bov or ""),
             str(a.sexo or ""),
             a.fecha_nacimiento.isoformat() if a.fecha_nacimiento else "",
-            str(getattr(a, "edad", "") or ""),                 # texto "X años, Y meses..."
+            str(getattr(a, "edad", "") or ""),
             str(getattr(a, "etapa_desarrollo", "") or ""),
             str(a.finca) if a.finca_id else "",
             str(a.lote) if a.lote_id else "",
@@ -265,22 +266,18 @@ def imprimir_reporte_animales_pdf(modeladmin, request, queryset):
 
         x = margin_x
         for val, w in zip(fila, cols):
-            # recorte simple para que no se desborde (puedes ajustar)
             txt = val[:18] + "…" if len(val) > 19 and w <= 95 else val
             c.drawString(x, y, txt)
             x += w
 
         y -= line_h
 
-    # Pie
     c.setFont("Helvetica-Oblique", 8)
     c.drawString(margin_x, 1.5 * cm, "Generado por SIGA")
     c.save()
     return response
 
 imprimir_reporte_animales_pdf.short_description = "Imprimir reporte PDF (seleccionados)"
-
-
 
 
 # =========================
@@ -295,14 +292,16 @@ def set_estado(estado):
     return _action
 
 
-
 class GanadoAnimalAdminForm(forms.ModelForm):
-    # ✅ Forzamos el formato de captura a DD/MM/AAAA
+    # Forzamos el formato de captura a DD/MM/AAAA
     fecha_nacimiento = forms.DateField(
         required=False,
         input_formats=["%d/%m/%Y"],
-        widget=AdminDateWidget(format="%d/%m/%Y"),
-        help_text="Formato: DD/MM/AAAA (ej: 17/01/2026)"
+        widget=AdminDateWidget(
+            format="%d/%m/%Y",
+            attrs={"placeholder": "DD/MM/AAAA", "data-date-format": "dd/mm/yyyy"},
+        ),
+        help_text="Formato: DD/MM/AAAA (ej: 17/01/2026)",
     )
 
     class Meta:
@@ -312,11 +311,16 @@ class GanadoAnimalAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Si tienes lógica de lotes por finca, déjala como la tenías:
         if self.instance and getattr(self.instance, "finca_id", None):
             self.fields["lote"].queryset = GanadoLote.objects.filter(finca_id=self.instance.finca_id)
         else:
             self.fields["lote"].queryset = GanadoLote.objects.none()
+
+    def clean_id_interno(self):
+        return normalize_identifier(self.cleaned_data.get("id_interno"))
+
+    def clean_id_siniga(self):
+        return normalize_identifier(self.cleaned_data.get("id_siniga"))
 
 
 # =========================
@@ -384,7 +388,6 @@ class GanadoRegistroAdmin(admin.ModelAdmin):
 class GanadoAnimalAdmin(admin.ModelAdmin):
     form = GanadoAnimalAdminForm
 
-    # ✅ Columnas en el listado del admin
     list_display = (
         "id",
         "id_interno",
@@ -441,7 +444,6 @@ class GanadoAnimalAdmin(admin.ModelAdmin):
         "madre",
     )
 
-    # ✅ Se ven en el detalle pero no se pueden editar
     readonly_fields = ("edad_admin", "etapa_admin", "created_at", "updated_at")
 
     actions = [
@@ -465,10 +467,8 @@ class GanadoAnimalAdmin(admin.ModelAdmin):
 
     @admin.display(description="Edad (Años, Meses, Días)", ordering="fecha_nacimiento")
     def edad_admin(self, obj):
-        """Muestra la edad como texto (ej: '2 años, 3 meses, 10 días')."""
         return str(getattr(obj, "edad", "") or "")
 
     @admin.display(description="Etapa de desarrollo")
     def etapa_admin(self, obj):
-        """Muestra la etapa de desarrollo calculada."""
         return str(getattr(obj, "etapa_desarrollo", "") or "")
