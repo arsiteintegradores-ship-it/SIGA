@@ -4,6 +4,10 @@ from django import forms
 from django.contrib import admin
 from django.http import HttpResponse
 from django.utils import timezone
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import cm
+
 
 from .models import (
     GanadoAnimal, GanadoFinca, GanadoLote,
@@ -175,6 +179,110 @@ def export_animales_xlsx(modeladmin, request, queryset):
 export_animales_xlsx.short_description = "Exportar animales seleccionados a Excel (XLSX)"
 
 
+def imprimir_reporte_animales_pdf(modeladmin, request, queryset):
+    """
+    Genera un PDF listo para imprimir de los animales seleccionados.
+    Incluye Edad (texto) y Etapa.
+    """
+    response = HttpResponse(content_type="application/pdf")
+    response["Content-Disposition"] = 'attachment; filename="reporte_animales.pdf"'
+
+    c = canvas.Canvas(response, pagesize=letter)
+    width, height = letter
+
+    # Estilos básicos
+    margin_x = 1.5 * cm
+    y = height - 2 * cm
+    line_h = 14
+
+    # Título
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(margin_x, y, "SIGA - Reporte de Animales")
+    y -= 18
+
+    # Fecha
+    c.setFont("Helvetica", 10)
+    c.drawString(margin_x, y, f"Fecha: {timezone.localdate().isoformat()}")
+    y -= 18
+
+    # Encabezados de tabla
+    c.setFont("Helvetica-Bold", 9)
+    headers = ["ID", "ID interno", "Nombre", "Sexo", "F. Nac", "Edad", "Etapa", "Finca", "Lote", "Estado"]
+    cols = [35, 70, 110, 35, 55, 95, 80, 90, 70, 55]  # anchos aprox
+    x = margin_x
+
+    for h, w in zip(headers, cols):
+        c.drawString(x, y, h)
+        x += w
+
+    y -= 10
+    c.line(margin_x, y, width - margin_x, y)
+    y -= 14
+
+    # Optimiza FKs
+    queryset = queryset.select_related("finca", "lote")
+
+    c.setFont("Helvetica", 8)
+
+    def nueva_pagina():
+        nonlocal y
+        c.showPage()
+        y = height - 2 * cm
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(margin_x, y, "SIGA - Reporte de Animales (continuación)")
+        y -= 18
+        c.setFont("Helvetica", 10)
+        c.drawString(margin_x, y, f"Fecha: {timezone.localdate().isoformat()}")
+        y -= 18
+
+        c.setFont("Helvetica-Bold", 9)
+        x2 = margin_x
+        for h2, w2 in zip(headers, cols):
+            c.drawString(x2, y, h2)
+            x2 += w2
+        y -= 10
+        c.line(margin_x, y, width - margin_x, y)
+        y -= 14
+        c.setFont("Helvetica", 8)
+
+    for a in queryset:
+        if y < 2.2 * cm:
+            nueva_pagina()
+
+        # datos
+        fila = [
+            str(a.id),
+            str(a.id_interno or ""),
+            str(a.nombre_bov or ""),
+            str(a.sexo or ""),
+            a.fecha_nacimiento.isoformat() if a.fecha_nacimiento else "",
+            str(getattr(a, "edad", "") or ""),                 # texto "X años, Y meses..."
+            str(getattr(a, "etapa_desarrollo", "") or ""),
+            str(a.finca) if a.finca_id else "",
+            str(a.lote) if a.lote_id else "",
+            str(a.estado or ""),
+        ]
+
+        x = margin_x
+        for val, w in zip(fila, cols):
+            # recorte simple para que no se desborde (puedes ajustar)
+            txt = val[:18] + "…" if len(val) > 19 and w <= 95 else val
+            c.drawString(x, y, txt)
+            x += w
+
+        y -= line_h
+
+    # Pie
+    c.setFont("Helvetica-Oblique", 8)
+    c.drawString(margin_x, 1.5 * cm, "Generado por SIGA")
+    c.save()
+    return response
+
+imprimir_reporte_animales_pdf.short_description = "Imprimir reporte PDF (seleccionados)"
+
+
+
+
 # =========================
 # Acciones rápidas (estado)
 # =========================
@@ -326,8 +434,9 @@ class GanadoAnimalAdmin(admin.ModelAdmin):
         set_estado("MUERTO"),
         set_estado("BAJA"),
         export_animales_xlsx,
+        imprimir_reporte_animales_pdf,
     ]
-
+        
     fieldsets = (
         ("Identificación", {"fields": ("id_interno", "id_siniga", "nombre_bov", "sexo")}),
         ("Origen / Ubicación", {"fields": ("finca", "lote", "productor", "upp")}),
