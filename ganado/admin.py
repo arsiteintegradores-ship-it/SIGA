@@ -14,6 +14,7 @@ from .models import (
     GanadoRaza, GanadoColor, GanadoProductor,
     GanadoUpp, GanadoRegistro,
 )
+from .utils import normalize_identifier
 
 admin.site.site_header = "SIGA - Administración"
 admin.site.site_title = "SIGA Admin"
@@ -301,8 +302,11 @@ class GanadoAnimalAdminForm(forms.ModelForm):
     fecha_nacimiento = forms.DateField(
         required=False,
         input_formats=["%d/%m/%Y"],
-        widget=AdminDateWidget(format="%d/%m/%Y"),
-        help_text="Formato: DD/MM/AAAA (ej: 17/01/2026)"
+        widget=AdminDateWidget(
+            format="%d/%m/%Y",
+            attrs={"placeholder": "DD/MM/AAAA", "data-date-format": "dd/mm/yyyy"},
+        ),
+        help_text="Formato: DD/MM/AAAA (ej: 17/01/2026)",
     )
 
     class Meta:
@@ -317,6 +321,12 @@ class GanadoAnimalAdminForm(forms.ModelForm):
             self.fields["lote"].queryset = GanadoLote.objects.filter(finca_id=self.instance.finca_id)
         else:
             self.fields["lote"].queryset = GanadoLote.objects.none()
+
+    def clean_id_interno(self):
+        return normalize_identifier(self.cleaned_data.get("id_interno"))
+
+    def clean_id_siniga(self):
+        return normalize_identifier(self.cleaned_data.get("id_siniga"))
 
 
 # =========================
