@@ -1,5 +1,5 @@
 from datetime import timedelta
-
+from django.contrib.admin.widgets import AdminDateWidget
 from django import forms
 from django.contrib import admin
 from django.http import HttpResponse
@@ -295,7 +295,16 @@ def set_estado(estado):
     return _action
 
 
+
 class GanadoAnimalAdminForm(forms.ModelForm):
+    # ✅ Forzamos el formato de captura a DD/MM/AAAA
+    fecha_nacimiento = forms.DateField(
+        required=False,
+        input_formats=["%d/%m/%Y"],
+        widget=AdminDateWidget(format="%d/%m/%Y"),
+        help_text="Formato: DD/MM/AAAA (ej: 17/01/2026)"
+    )
+
     class Meta:
         model = GanadoAnimal
         fields = "__all__"
@@ -303,39 +312,11 @@ class GanadoAnimalAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        if self.instance and self.instance.finca_id:
+        # Si tienes lógica de lotes por finca, déjala como la tenías:
+        if self.instance and getattr(self.instance, "finca_id", None):
             self.fields["lote"].queryset = GanadoLote.objects.filter(finca_id=self.instance.finca_id)
         else:
             self.fields["lote"].queryset = GanadoLote.objects.none()
-
-    def clean(self):
-        cleaned = super().clean()
-
-        finca = cleaned.get("finca")
-        lote = cleaned.get("lote")
-        fecha_nacimiento = cleaned.get("fecha_nacimiento")
-        padre = cleaned.get("padre")
-        madre = cleaned.get("madre")
-
-        if fecha_nacimiento and fecha_nacimiento > timezone.localdate():
-            self.add_error("fecha_nacimiento", "La fecha de nacimiento no puede ser futura.")
-
-        if finca and lote and lote.finca_id != finca.id:
-            self.add_error("lote", "Ese lote no pertenece a la finca seleccionada.")
-
-        if padre and getattr(padre, "sexo", None) and padre.sexo != "M":
-            self.add_error("padre", "El PADRE debe ser sexo 'M' (macho).")
-
-        if madre and getattr(madre, "sexo", None) and madre.sexo != "H":
-            self.add_error("madre", "La MADRE debe ser sexo 'H' (hembra).")
-
-        if self.instance and self.instance.pk:
-            if padre and padre.pk == self.instance.pk:
-                self.add_error("padre", "Un animal no puede ser su propio padre.")
-            if madre and madre.pk == self.instance.pk:
-                self.add_error("madre", "Un animal no puede ser su propia madre.")
-
-        return cleaned
 
 
 # =========================
@@ -403,30 +384,65 @@ class GanadoRegistroAdmin(admin.ModelAdmin):
 class GanadoAnimalAdmin(admin.ModelAdmin):
     form = GanadoAnimalAdminForm
 
+    # ✅ Columnas en el listado del admin
     list_display = (
-        "id", "id_interno", "id_siniga", "nombre_bov", "sexo",
-        "fecha_nacimiento", "edad", "etapa_desarrollo",
-        "raza", "color", "finca", "lote", "estado",
-        "peso_nacimiento", "peso_destete",
-        "created_at", "updated_at",
+        "id",
+        "id_interno",
+        "id_siniga",
+        "nombre_bov",
+        "sexo",
+        "fecha_nacimiento",
+        "edad_admin",
+        "etapa_admin",
+        "raza",
+        "color",
+        "finca",
+        "lote",
+        "estado",
+        "peso_nacimiento",
+        "peso_destete",
+        "created_at",
+        "updated_at",
     )
 
     search_fields = (
-        "id_interno", "id_siniga", "nombre_bov",
-        "raza__raza", "color__color",
-        "finca__nombre", "lote__nombre",
+        "id_interno",
+        "id_siniga",
+        "nombre_bov",
+        "raza__raza",
+        "color__color",
+        "finca__nombre",
+        "lote__nombre",
     )
 
     list_filter = (
-        "sexo", "estado", "raza", "color", "finca", "lote",
-        FechaNacimientoFilter, PesoNacimientoFilter, PesoDesteteFilter
+        "sexo",
+        "estado",
+        "raza",
+        "color",
+        "finca",
+        "lote",
+        FechaNacimientoFilter,
+        PesoNacimientoFilter,
+        PesoDesteteFilter,
     )
 
     ordering = ("-id",)
 
-    autocomplete_fields = ("productor", "upp", "color", "raza", "registro", "finca", "lote", "padre", "madre")
+    autocomplete_fields = (
+        "productor",
+        "upp",
+        "color",
+        "raza",
+        "registro",
+        "finca",
+        "lote",
+        "padre",
+        "madre",
+    )
 
-    readonly_fields = ("edad", "etapa_desarrollo", "created_at", "updated_at")
+    # ✅ Se ven en el detalle pero no se pueden editar
+    readonly_fields = ("edad_admin", "etapa_admin", "created_at", "updated_at")
 
     actions = [
         set_estado("ACTIVO"),
@@ -436,13 +452,23 @@ class GanadoAnimalAdmin(admin.ModelAdmin):
         export_animales_xlsx,
         imprimir_reporte_animales_pdf,
     ]
-        
+
     fieldsets = (
         ("Identificación", {"fields": ("id_interno", "id_siniga", "nombre_bov", "sexo")}),
         ("Origen / Ubicación", {"fields": ("finca", "lote", "productor", "upp")}),
         ("Características", {"fields": ("raza", "color", "estado", "notas")}),
         ("Pesos / Fechas", {"fields": ("fecha_nacimiento", "peso_nacimiento", "peso_destete")}),
-        ("Edad / Etapa (calculado)", {"fields": ("edad", "etapa_desarrollo")}),
+        ("Edad / Etapa (calculado)", {"fields": ("edad_admin", "etapa_admin")}),
         ("Genealogía", {"fields": ("padre", "madre", "registro")}),
         ("Sistema", {"fields": ("created_at", "updated_at")}),
     )
+
+    @admin.display(description="Edad (Años, Meses, Días)", ordering="fecha_nacimiento")
+    def edad_admin(self, obj):
+        """Muestra la edad como texto (ej: '2 años, 3 meses, 10 días')."""
+        return str(getattr(obj, "edad", "") or "")
+
+    @admin.display(description="Etapa de desarrollo")
+    def etapa_admin(self, obj):
+        """Muestra la etapa de desarrollo calculada."""
+        return str(getattr(obj, "etapa_desarrollo", "") or "")

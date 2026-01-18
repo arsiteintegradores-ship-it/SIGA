@@ -1,0 +1,14 @@
+{% extends "admin/base.html" %}
+{% load i18n static %}
+
+{% block branding %}
+<div id="site-name" style="display:flex; align-items:center; gap:14px;">
+  <a href="{% url 'admin:index' %}" style="font-weight:700;">SIGA Admin</a>
+
+  <a href="{% url 'admin-dashboard' %}"
+     style="padding:6px 10px; border-radius:12px; background:#fff; border:1px solid #ddd; font-weight:700;">
+    📊 Dashboard
+  </a>
+</div>
+{% endblock %}
+

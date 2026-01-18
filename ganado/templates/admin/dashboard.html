@@ -1,0 +1,84 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content %}
+<h1>Dashboard SIGA</h1>
+
+<form method="get" style="margin: 12px 0; padding:12px; background:#fff; border:1px solid #ddd;">
+  <label>Finca:</label>
+  <select name="finca_id">
+    <option value="">Todas</option>
+    {% for f in fincas %}
+      <option value="{{ f.id }}" {% if selected.finca_id|add:"" == f.id|add:"" %}selected{% endif %}>{{ f.nombre }}</option>
+    {% endfor %}
+  </select>
+
+  <label style="margin-left:12px;">Lote:</label>
+  <select name="lote_id">
+    <option value="">Todos</option>
+    {% for l in lotes %}
+      <option value="{{ l.id }}" {% if selected.lote_id|add:"" == l.id|add:"" %}selected{% endif %}>{{ l.nombre }}</option>
+    {% endfor %}
+  </select>
+
+  <label style="margin-left:12px;">Estado:</label>
+  <select name="estado">
+    <option value="">Todos</option>
+    <option value="ACTIVO" {% if selected.estado == "ACTIVO" %}selected{% endif %}>ACTIVO</option>
+    <option value="VENDIDO" {% if selected.estado == "VENDIDO" %}selected{% endif %}>VENDIDO</option>
+    <option value="MUERTO" {% if selected.estado == "MUERTO" %}selected{% endif %}>MUERTO</option>
+    <option value="BAJA" {% if selected.estado == "BAJA" %}selected{% endif %}>BAJA</option>
+  </select>
+
+  <label style="margin-left:12px;">Sexo:</label>
+  <select name="sexo">
+    <option value="">Todos</option>
+    <option value="M" {% if selected.sexo == "M" %}selected{% endif %}>Macho</option>
+    <option value="H" {% if selected.sexo == "H" %}selected{% endif %}>Hembra</option>
+  </select>
+
+  <button type="submit" class="button" style="margin-left:12px;">Aplicar</button>
+  <a class="button" href="/admin/dashboard/">Limpiar</a>
+</form>
+
+<div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+  <div style="background:#fff; border:1px solid #ddd; padding:12px;">
+    <h2>Animales por etapa</h2>
+    <canvas id="cEtapa"></canvas>
+  </div>
+
+  <div style="background:#fff; border:1px solid #ddd; padding:12px;">
+    <h2>Animales por estado</h2>
+    <canvas id="cEstado"></canvas>
+  </div>
+
+  <div style="background:#fff; border:1px solid #ddd; padding:12px;">
+    <h2>Promedio peso destete por finca</h2>
+    <canvas id="cPeso"></canvas>
+  </div>
+
+  <div style="background:#fff; border:1px solid #ddd; padding:12px;">
+    <h2>Distribución edad (meses)</h2>
+    <canvas id="cEdad"></canvas>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const data = {{ chart|safe }};
+
+  function makeChart(id, labels, values, type="bar") {
+    const ctx = document.getElementById(id);
+    return new Chart(ctx, {
+      type,
+      data: { labels, datasets: [{ label: id, data: values }] },
+      options: { responsive: true, plugins: { legend: { display: false } } }
+    });
+  }
+
+  makeChart("cEtapa", data.etapa_labels, data.etapa_values, "bar");
+  makeChart("cEstado", data.estado_labels, data.estado_values, "bar");
+  makeChart("cPeso", data.finca_labels, data.finca_prom, "bar");
+  makeChart("cEdad", data.edad_labels, data.edad_values, "bar");
+</script>
+{% endblock %}

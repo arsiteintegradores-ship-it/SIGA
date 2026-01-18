@@ -16,7 +16,9 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from ganado.dashboard_admin import admin_dashboard
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path("admin/dashboard/", admin_dashboard, name="admin-dashboard"),
+    path("admin/", admin.site.urls),
 ]
