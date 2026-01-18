@@ -2,6 +2,7 @@
 # Register your models here.
 
 from datetime import date, timedelta
+from decimal import Decimal, InvalidOperation
 from django.contrib import admin
 from django.http import HttpResponse
 from django.utils import timezone
@@ -13,6 +14,7 @@ from .models import (
     GanadoRaza, GanadoColor, GanadoProductor,
     GanadoUpp, GanadoRegistro,
 )
+from .utils import DATE_INPUT_FORMATS, parse_es_date
 
 admin.site.site_header = "SIGA - Administración"
 admin.site.site_title = "SIGA Admin"
@@ -200,6 +202,33 @@ class GanadoAnimalAdminForm(forms.ModelForm):
         else:
             # En alta nueva: no mostrar todos los lotes
             self.fields["lote"].queryset = GanadoLote.objects.none()
+        if "fecha_nacimiento" in self.fields:
+            self.fields["fecha_nacimiento"].input_formats = DATE_INPUT_FORMATS
+            self.fields["fecha_nacimiento"].widget.attrs.update(
+                {"placeholder": "dd/mm/aaaa", "inputmode": "numeric"}
+            )
+
+    def clean_fecha_nacimiento(self):
+        raw_value = self.data.get("fecha_nacimiento", "")
+        return parse_es_date(raw_value)
+
+    def _clean_decimal(self, field_name: str):
+        raw_value = self.data.get(field_name, "")
+        if raw_value in ("", None):
+            return None
+        if isinstance(raw_value, (int, float, Decimal)):
+            return raw_value
+        normalized = str(raw_value).replace(",", ".").strip()
+        try:
+            return Decimal(normalized)
+        except (InvalidOperation, ValueError):
+            raise forms.ValidationError("Ingresa un número válido.")
+
+    def clean_peso_nacimiento(self):
+        return self._clean_decimal("peso_nacimiento")
+
+    def clean_peso_destete(self):
+        return self._clean_decimal("peso_destete")
 
     def clean(self):
         cleaned = super().clean()
@@ -234,6 +263,9 @@ class GanadoAnimalAdminForm(forms.ModelForm):
                 self.add_error("madre", "Un animal no puede ser su propia madre.")
 
         return cleaned
+
+    class Media:
+        js = ("ganado/js/date_mask.js",)
 
 
 
@@ -307,7 +339,7 @@ class GanadoAnimalAdmin(admin.ModelAdmin):
     list_display = (
         "id", "id_interno", "id_siniga", "nombre_bov", "sexo",
         "raza", "finca", "lote", "estado",
-        "fecha_nacimiento", "peso_nacimiento", "peso_destete",
+        "fecha_nacimiento", "peso_nacimiento", "peso_destete", "edad_formateada",
     )
     search_fields = (
         "id_interno", "id_siniga", "nombre_bov",
@@ -322,7 +354,7 @@ class GanadoAnimalAdmin(admin.ModelAdmin):
 
     autocomplete_fields = ("productor", "upp", "color", "raza", "registro", "finca", "lote", "padre", "madre")
 
-    readonly_fields = ("created_at", "updated_at")
+    readonly_fields = ("created_at", "updated_at", "edad_formateada")
 
     actions = [
         set_estado("ACTIVO"),
@@ -336,7 +368,11 @@ class GanadoAnimalAdmin(admin.ModelAdmin):
         ("Identificación", {"fields": ("id_interno", "id_siniga", "nombre_bov", "sexo")}),
         ("Origen / Ubicación", {"fields": ("finca", "lote", "productor", "upp")}),
         ("Características", {"fields": ("raza", "color", "estado", "notas")}),
-        ("Pesos / Fechas", {"fields": ("fecha_nacimiento", "peso_nacimiento", "peso_destete")}),
+        ("Pesos / Fechas", {"fields": ("fecha_nacimiento", "peso_nacimiento", "peso_destete", "edad_formateada")}),
         ("Genealogía", {"fields": ("padre", "madre", "registro")}),
         ("Sistema", {"fields": ("created_at", "updated_at")}),
     )
+
+    @admin.display(description="Edad")
+    def edad_formateada(self, obj):
+        return obj.edad or "Sin fecha"
