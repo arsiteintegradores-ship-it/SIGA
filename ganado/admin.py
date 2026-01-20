@@ -230,7 +230,7 @@ def imprimir_reporte_animales_pdf(modeladmin, request, queryset):
         "Madre",
         "Estado",
     ]
-    min_widths = [55, 70, 110, 80, 35, 70, 160, 120, 170, 90, 90, 70]
+    min_widths = [55, 70, 110, 80, 35, 70, 190, 120, 170, 90, 90, 70]
     header_font = "Helvetica-Bold"
     header_size = 9
     body_font = "Helvetica"
@@ -323,10 +323,12 @@ def imprimir_reporte_animales_pdf(modeladmin, request, queryset):
         c.setFont(body_font, body_size)
         c.setStrokeColor(colors.HexColor("#E0E0E0"))
 
+    total_animales = 0
     for a in queryset:
         if y < margin_bottom + line_h:
             nueva_pagina()
 
+        total_animales += 1
         fila = [
             str(a.id_interno or ""),
             str(a.id_siniga) if a.id_siniga else "Sin Siniga",
@@ -350,6 +352,15 @@ def imprimir_reporte_animales_pdf(modeladmin, request, queryset):
 
         c.line(margin_x, y - 3, width - margin_x, y - 3)
         y -= line_h
+
+    if y < margin_bottom + (2 * line_h):
+        nueva_pagina()
+
+    c.setFont("Helvetica-Bold", 9)
+    c.setFillColor(colors.black)
+    y -= line_h
+    c.drawString(margin_x, y, f"Total animales: {total_animales}")
+    y -= line_h
 
     c.setFont("Helvetica-Oblique", 8)
     c.setFillColor(colors.HexColor("#666666"))
