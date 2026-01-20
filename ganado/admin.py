@@ -1,7 +1,9 @@
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 
 from django import forms
 from django.contrib import admin
+from django.contrib import messages
 from django.contrib.admin.widgets import AdminDateWidget
 from django.http import HttpResponse
 from django.utils import timezone
@@ -604,3 +606,36 @@ class GanadoAnimalAdmin(admin.ModelAdmin):
     @admin.display(description="Etapa de desarrollo")
     def etapa_admin(self, obj):
         return str(getattr(obj, "etapa_desarrollo", "") or "")
+
+    def _peso_warnings(self, obj):
+        warnings = []
+        if obj.sexo and obj.peso_nacimiento is not None:
+            if obj.sexo == "M":
+                if obj.peso_nacimiento < Decimal("30"):
+                    warnings.append("Advertencia: peso nacimiento bajo (<30 kg) para macho.")
+                elif obj.peso_nacimiento > Decimal("45"):
+                    warnings.append("Advertencia: peso nacimiento alto (>45 kg) para macho.")
+            elif obj.sexo == "H":
+                if obj.peso_nacimiento < Decimal("28"):
+                    warnings.append("Advertencia: peso nacimiento bajo (<28 kg) para hembra.")
+                elif obj.peso_nacimiento > Decimal("42"):
+                    warnings.append("Advertencia: peso nacimiento alto (>42 kg) para hembra.")
+
+        if obj.sexo and obj.peso_destete is not None:
+            if obj.sexo == "M":
+                if obj.peso_destete < Decimal("160"):
+                    warnings.append("Advertencia: peso destete bajo (<160 kg) para macho.")
+                elif obj.peso_destete > Decimal("260"):
+                    warnings.append("Advertencia: peso destete alto (>260 kg) para macho.")
+            elif obj.sexo == "H":
+                if obj.peso_destete < Decimal("150"):
+                    warnings.append("Advertencia: peso destete bajo (<150 kg) para hembra.")
+                elif obj.peso_destete > Decimal("240"):
+                    warnings.append("Advertencia: peso destete alto (>240 kg) para hembra.")
+
+        return warnings
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        for msg in self._peso_warnings(obj):
+            messages.warning(request, msg)
