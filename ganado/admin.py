@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 
 from django import forms
 from django.contrib import admin
@@ -148,9 +148,24 @@ def export_animales_xlsx(modeladmin, request, queryset):
         "raza", "color", "finca", "lote", "padre", "madre", "productor", "upp"
     )
 
+    fecha_col = headers.index("Fecha nac") + 1
+
     for a in queryset:
         edad_txt = str(getattr(a, "edad", "") or "")
         etapa_txt = str(getattr(a, "etapa_desarrollo", "") or "")
+        fecha_value = a.fecha_nacimiento
+        fecha_date = None
+        if isinstance(fecha_value, datetime):
+            fecha_date = fecha_value.date()
+        elif isinstance(fecha_value, date):
+            fecha_date = fecha_value
+        elif isinstance(fecha_value, str) and fecha_value:
+            for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+                try:
+                    fecha_date = datetime.strptime(fecha_value, fmt).date()
+                    break
+                except ValueError:
+                    continue
 
         ws.append([
             a.id,
@@ -163,7 +178,7 @@ def export_animales_xlsx(modeladmin, request, queryset):
             str(a.finca) if a.finca_id else "",
             str(a.lote) if a.lote_id else "",
             a.estado,
-            a.fecha_nacimiento.isoformat() if a.fecha_nacimiento else "",
+            fecha_date or "",
             edad_txt,
             etapa_txt,
             float(a.peso_nacimiento) if a.peso_nacimiento is not None else "",
@@ -176,6 +191,9 @@ def export_animales_xlsx(modeladmin, request, queryset):
             a.created_at.isoformat() if a.created_at else "",
             a.updated_at.isoformat() if a.updated_at else "",
         ])
+        if fecha_date:
+            cell = ws.cell(row=ws.max_row, column=fecha_col)
+            cell.number_format = "dd/mm/yyyy"
 
     response = HttpResponse(
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -394,7 +412,7 @@ class GanadoAnimalAdmin(admin.ModelAdmin):
         "id_siniga",
         "nombre_bov",
         "sexo",
-        "fecha_nacimiento",
+        "fecha_nacimiento_fmt",
         "edad_admin",
         "etapa_admin",
         "raza",
@@ -444,7 +462,13 @@ class GanadoAnimalAdmin(admin.ModelAdmin):
         "madre",
     )
 
-    readonly_fields = ("edad_admin", "etapa_admin", "created_at", "updated_at")
+    readonly_fields = (
+        "fecha_nacimiento_fmt",
+        "edad_admin",
+        "etapa_admin",
+        "created_at",
+        "updated_at",
+    )
 
     actions = [
         set_estado("ACTIVO"),
@@ -459,11 +483,15 @@ class GanadoAnimalAdmin(admin.ModelAdmin):
         ("Identificación", {"fields": ("id_interno", "id_siniga", "nombre_bov", "sexo")}),
         ("Origen / Ubicación", {"fields": ("finca", "lote", "productor", "upp")}),
         ("Características", {"fields": ("raza", "color", "estado", "notas")}),
-        ("Pesos / Fechas", {"fields": ("fecha_nacimiento", "peso_nacimiento", "peso_destete")}),
+        ("Pesos / Fechas", {"fields": ("fecha_nacimiento", "fecha_nacimiento_fmt", "peso_nacimiento", "peso_destete")}),
         ("Edad / Etapa (calculado)", {"fields": ("edad_admin", "etapa_admin")}),
         ("Genealogía", {"fields": ("padre", "madre", "registro")}),
         ("Sistema", {"fields": ("created_at", "updated_at")}),
     )
+
+    @admin.display(description="Fecha nacimiento", ordering="fecha_nacimiento")
+    def fecha_nacimiento_fmt(self, obj):
+        return obj.fecha_nacimiento.strftime("%d/%m/%Y") if obj.fecha_nacimiento else "—"
 
     @admin.display(description="Edad (Años, Meses, Días)", ordering="fecha_nacimiento")
     def edad_admin(self, obj):
