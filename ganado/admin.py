@@ -220,13 +220,17 @@ def imprimir_reporte_animales_pdf(modeladmin, request, queryset):
         "Interno",
         "Siniga",
         "Nombre",
-        "Sexo",
-        "Fecha Nac.",
+        "Raza",
+        "Sx",
+        "F. Nac.",
         "Edad",
         "Etapa",
+        "Productor",
+        "Padre",
+        "Madre",
         "Estado",
     ]
-    min_widths = [55, 70, 110, 35, 70, 90, 120, 70]
+    min_widths = [55, 70, 110, 80, 35, 70, 160, 120, 170, 90, 90, 70]
     header_font = "Helvetica-Bold"
     header_size = 9
     body_font = "Helvetica"
@@ -257,7 +261,7 @@ def imprimir_reporte_animales_pdf(modeladmin, request, queryset):
     scale = available_width / base_total
     cols = [w * scale for w in base_widths]
 
-    queryset = queryset.select_related("finca")
+    queryset = queryset.select_related("finca", "raza", "padre", "madre", "productor")
     first_animal = queryset.first()
     finca_name = str(first_animal.finca) if first_animal and first_animal.finca_id else ""
     date_str = timezone.localdate().strftime("%d/%m/%Y")
@@ -281,6 +285,11 @@ def imprimir_reporte_animales_pdf(modeladmin, request, queryset):
         c.drawRightString(width - margin_x, height - margin_top, date_str)
         c.setStrokeColor(colors.HexColor("#9A9A9A"))
         c.line(margin_x, height - margin_top - 4, width - margin_x, height - margin_top - 4)
+
+    def draw_footer():
+        c.setFont("Helvetica", 8)
+        c.setFillColor(colors.HexColor("#666666"))
+        c.drawRightString(width - margin_x, 1.5 * cm, f"Pagina {c.getPageNumber()}")
 
     def draw_table_header(y_pos):
         header_height = 14
@@ -306,6 +315,7 @@ def imprimir_reporte_animales_pdf(modeladmin, request, queryset):
 
     def nueva_pagina():
         nonlocal y
+        draw_footer()
         c.showPage()
         draw_header()
         y = height - margin_top - 0.7 * cm
@@ -319,12 +329,16 @@ def imprimir_reporte_animales_pdf(modeladmin, request, queryset):
 
         fila = [
             str(a.id_interno or ""),
-            str(a.id_siniga or ""),
+            str(a.id_siniga) if a.id_siniga else "Sin Siniga",
             str(a.nombre_bov or ""),
+            str(a.raza) if a.raza_id else "",
             str(a.sexo or ""),
             a.fecha_nacimiento.strftime("%d/%m/%Y") if a.fecha_nacimiento else "",
             str(getattr(a, "edad", "") or ""),
             str(getattr(a, "etapa_desarrollo", "") or ""),
+            str(a.productor) if a.productor_id else "",
+            str(a.padre) if a.padre_id else "",
+            str(a.madre) if a.madre_id else "",
             str(a.estado or ""),
         ]
 
@@ -340,6 +354,7 @@ def imprimir_reporte_animales_pdf(modeladmin, request, queryset):
     c.setFont("Helvetica-Oblique", 8)
     c.setFillColor(colors.HexColor("#666666"))
     c.drawString(margin_x, 1.5 * cm, "Generado por SIGA")
+    draw_footer()
     c.save()
     return response
 
