@@ -6,7 +6,8 @@ from django.contrib.admin.widgets import AdminDateWidget
 from django.http import HttpResponse
 from django.utils import timezone
 
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import letter, landscape
+from reportlab.lib import colors
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import cm
 
@@ -214,83 +215,130 @@ def imprimir_reporte_animales_pdf(modeladmin, request, queryset):
     response["Content-Disposition"] = 'attachment; filename="reporte_animales.pdf"'
 
     c = canvas.Canvas(response, pagesize=letter)
-    width, height = letter
+
+    headers = [
+        "Interno",
+        "Siniga",
+        "Nombre",
+        "Sexo",
+        "Fecha Nac.",
+        "Edad",
+        "Etapa",
+        "Estado",
+    ]
+    min_widths = [55, 70, 110, 35, 70, 90, 120, 70]
+    header_font = "Helvetica-Bold"
+    header_size = 9
+    body_font = "Helvetica"
+    body_size = 8.5
 
     margin_x = 1.5 * cm
-    y = height - 2 * cm
-    line_h = 14
+    margin_top = 2 * cm
+    margin_bottom = 2 * cm
 
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(margin_x, y, "SIGA - Reporte de Animales")
-    y -= 18
+    def required_width():
+        return sum(
+            max(min_w, c.stringWidth(h, header_font, header_size) + 6)
+            for h, min_w in zip(headers, min_widths)
+        )
 
-    c.setFont("Helvetica", 10)
-    c.drawString(margin_x, y, f"Fecha: {timezone.localdate().isoformat()}")
-    y -= 18
+    width, height = letter
+    available_width = width - (2 * margin_x)
+    if required_width() > available_width:
+        width, height = landscape(letter)
+        c.setPageSize((width, height))
+        available_width = width - (2 * margin_x)
 
-    c.setFont("Helvetica-Bold", 9)
-    headers = ["ID", "ID interno", "Nombre", "Sexo", "F. Nac", "Edad", "Etapa", "Finca", "Lote", "Estado"]
-    cols = [35, 70, 110, 35, 55, 95, 80, 90, 70, 55]
-    x = margin_x
+    base_widths = [
+        max(min_w, c.stringWidth(h, header_font, header_size) + 6)
+        for h, min_w in zip(headers, min_widths)
+    ]
+    base_total = sum(base_widths) or 1
+    scale = available_width / base_total
+    cols = [w * scale for w in base_widths]
 
-    for h, w in zip(headers, cols):
-        c.drawString(x, y, h)
-        x += w
+    queryset = queryset.select_related("finca")
+    first_animal = queryset.first()
+    finca_name = str(first_animal.finca) if first_animal and first_animal.finca_id else ""
+    date_str = timezone.localdate().strftime("%d/%m/%Y")
 
-    y -= 10
-    c.line(margin_x, y, width - margin_x, y)
-    y -= 14
+    def fit_text(text, max_width):
+        text = str(text or "")
+        if c.stringWidth(text, body_font, body_size) <= max_width:
+            return text
+        ellipsis = "..."
+        max_width = max(0, max_width - c.stringWidth(ellipsis, body_font, body_size))
+        for i in range(len(text), 0, -1):
+            if c.stringWidth(text[:i], body_font, body_size) <= max_width:
+                return text[:i] + ellipsis
+        return ellipsis
 
-    queryset = queryset.select_related("finca", "lote")
-    c.setFont("Helvetica", 8)
+    def draw_header():
+        c.setFont("Helvetica-Bold", 11)
+        c.setFillColor(colors.black)
+        c.drawString(margin_x, height - margin_top, finca_name)
+        c.setFont("Helvetica", 9)
+        c.drawRightString(width - margin_x, height - margin_top, date_str)
+        c.setStrokeColor(colors.HexColor("#9A9A9A"))
+        c.line(margin_x, height - margin_top - 4, width - margin_x, height - margin_top - 4)
+
+    def draw_table_header(y_pos):
+        header_height = 14
+        c.setFillColor(colors.HexColor("#F0F0F0"))
+        c.rect(margin_x, y_pos - header_height + 2, available_width, header_height, fill=1, stroke=0)
+        c.setFillColor(colors.black)
+        c.setFont(header_font, header_size)
+        x = margin_x
+        for h, w in zip(headers, cols):
+            c.drawString(x + 2, y_pos, h)
+            x += w
+        c.setStrokeColor(colors.HexColor("#B3B3B3"))
+        c.line(margin_x, y_pos - header_height + 2, width - margin_x, y_pos - header_height + 2)
+        return y_pos - header_height - 4
+
+    y = height - margin_top - 0.7 * cm
+    draw_header()
+    y = draw_table_header(y)
+
+    line_h = 12
+    c.setFont(body_font, body_size)
+    c.setStrokeColor(colors.HexColor("#E0E0E0"))
 
     def nueva_pagina():
         nonlocal y
         c.showPage()
-        y = height - 2 * cm
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(margin_x, y, "SIGA - Reporte de Animales (continuación)")
-        y -= 18
-        c.setFont("Helvetica", 10)
-        c.drawString(margin_x, y, f"Fecha: {timezone.localdate().isoformat()}")
-        y -= 18
-
-        c.setFont("Helvetica-Bold", 9)
-        x2 = margin_x
-        for h2, w2 in zip(headers, cols):
-            c.drawString(x2, y, h2)
-            x2 += w2
-        y -= 10
-        c.line(margin_x, y, width - margin_x, y)
-        y -= 14
-        c.setFont("Helvetica", 8)
+        draw_header()
+        y = height - margin_top - 0.7 * cm
+        y = draw_table_header(y)
+        c.setFont(body_font, body_size)
+        c.setStrokeColor(colors.HexColor("#E0E0E0"))
 
     for a in queryset:
-        if y < 2.2 * cm:
+        if y < margin_bottom + line_h:
             nueva_pagina()
 
         fila = [
-            str(a.id),
             str(a.id_interno or ""),
+            str(a.id_siniga or ""),
             str(a.nombre_bov or ""),
             str(a.sexo or ""),
-            a.fecha_nacimiento.isoformat() if a.fecha_nacimiento else "",
+            a.fecha_nacimiento.strftime("%d/%m/%Y") if a.fecha_nacimiento else "",
             str(getattr(a, "edad", "") or ""),
             str(getattr(a, "etapa_desarrollo", "") or ""),
-            str(a.finca) if a.finca_id else "",
-            str(a.lote) if a.lote_id else "",
             str(a.estado or ""),
         ]
 
         x = margin_x
         for val, w in zip(fila, cols):
-            txt = val[:18] + "…" if len(val) > 19 and w <= 95 else val
-            c.drawString(x, y, txt)
+            txt = fit_text(val, w - 4)
+            c.drawString(x + 2, y, txt)
             x += w
 
+        c.line(margin_x, y - 3, width - margin_x, y - 3)
         y -= line_h
 
     c.setFont("Helvetica-Oblique", 8)
+    c.setFillColor(colors.HexColor("#666666"))
     c.drawString(margin_x, 1.5 * cm, "Generado por SIGA")
     c.save()
     return response
