@@ -185,7 +185,7 @@ def export_animales_xlsx(modeladmin, request, queryset):
         ws.append([
             a.id,
             a.id_interno,
-            a.id_siniga,
+            a.id_siniga or "Sin Siniga",
             a.nombre_bov,
             a.sexo,
             str(a.raza) if a.raza_id else "",
