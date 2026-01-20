@@ -1,36 +1,93 @@
-(function ($) {
-    "use strict";
-  
-    function applyMaskTo(el) {
-      if (!el) return;
-  
-      el.setAttribute("autocomplete", "off");
-      el.setAttribute("placeholder", "DD/MM/AAAA");
-  
-      const format = () => {
-        let v = el.value.replace(/\D/g, "").slice(0, 8); // ddmmyyyy
-  
-        if (v.length >= 5) el.value = v.slice(0, 2) + "/" + v.slice(2, 4) + "/" + v.slice(4);
-        else if (v.length >= 3) el.value = v.slice(0, 2) + "/" + v.slice(2);
-        else el.value = v;
-      };
-  
-      el.addEventListener("input", format);
-      el.addEventListener("paste", () => setTimeout(format, 0));
+(function () {
+  "use strict";
+
+  function onlyDigits(s) {
+    return (s || "").replace(/\D/g, "");
+  }
+
+  function formatDDMMYYYY(digits) {
+    const d = digits.slice(0, 2);
+    const m = digits.slice(2, 4);
+    const y = digits.slice(4, 8);
+
+    let out = "";
+    if (d.length) out += d;
+    if (m.length) out += (out.length ? "/" : "") + m;
+    if (y.length) out += (out.length ? "/" : "") + y;
+    return out;
+  }
+
+  function caretFromDigitsCount(formattedValue, digitsCount) {
+    if (digitsCount <= 0) return 0;
+    let count = 0;
+    for (let i = 0; i < formattedValue.length; i++) {
+      if (/\d/.test(formattedValue[i])) count++;
+      if (count >= digitsCount) return i + 1;
     }
-  
-    // Django Admin: usa jQuery propio (django.jQuery)
-    $(function () {
-      // Cubre TODOS los casos:
-      // 1) el id normal
-      // 2) por nombre del campo
-      // 3) por clase del admin (vDateField)
-      const el =
-        document.getElementById("id_fecha_nacimiento") ||
-        document.querySelector('input[name="fecha_nacimiento"]') ||
-        document.querySelector("input.vDateField");
-  
-      applyMaskTo(el);
+    return formattedValue.length;
+  }
+
+  function applyMask(input) {
+    const prevValue = input.value || "";
+    const prevPos = input.selectionStart || 0;
+
+    const digitsBeforeCursor = onlyDigits(prevValue.slice(0, prevPos)).length;
+    const digits = onlyDigits(prevValue).slice(0, 8);
+    const formatted = formatDDMMYYYY(digits);
+
+    input.value = formatted;
+
+    const newPos = caretFromDigitsCount(formatted, digitsBeforeCursor);
+    input.setSelectionRange(newPos, newPos);
+  }
+
+  function attach(input) {
+    if (input.dataset.dateMaskAttached === "1") return;
+    input.dataset.dateMaskAttached = "1";
+
+    input.setAttribute("inputmode", "numeric");
+    input.setAttribute("autocomplete", "off");
+    input.setAttribute("placeholder", input.getAttribute("placeholder") || "dd/mm/aaaa");
+
+    input.addEventListener("input", function () {
+      applyMask(input);
     });
-  })(django.jQuery);
-  
+
+    input.addEventListener("blur", function () {
+      if (input.value && input.value.length !== 10) {
+        applyMask(input);
+      }
+    });
+
+    if (input.value) applyMask(input);
+  }
+
+  function init() {
+    // Django admin: el input real suele ser id_fecha_nacimiento
+    const direct = document.querySelectorAll("input#id_fecha_nacimiento");
+    for (let i = 0; i < direct.length; i++) attach(direct[i]);
+
+    // También soporta clase genérica
+    const generic = document.querySelectorAll("input.js-date-mask");
+    for (let j = 0; j < generic.length; j++) attach(generic[j]);
+
+    // Por si se agregan inlines dinámicamente
+    const observer = new MutationObserver(function (mutations) {
+      for (const m of mutations) {
+        for (const node of m.addedNodes || []) {
+          if (!node || !node.querySelectorAll) continue;
+          const newInputs = node.querySelectorAll("input#id_fecha_nacimiento, input.js-date-mask");
+          for (let k = 0; k < newInputs.length; k++) attach(newInputs[k]);
+        }
+      }
+    });
+
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();

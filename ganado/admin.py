@@ -322,6 +322,10 @@ class GanadoAnimalAdminForm(forms.ModelForm):
         help_text="Formato: DD/MM/AAAA (ej: 17/01/2026)",
     )
 
+    class Media:
+        js = ("ganado/js/date_mask.js",)
+
+    
     class Meta:
         model = GanadoAnimal
         fields = "__all__"

@@ -87,3 +87,4 @@ staticfiles/
 # **NO lo ignores** si trabajas con Django en equipo
 # */migrations/*.py
 # !*/migrations/__init__.py
+ganado/avances.txt
