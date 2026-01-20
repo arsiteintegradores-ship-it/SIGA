@@ -30,6 +30,8 @@ class GanadoFinca(models.Model):
     class Meta:
         managed = False
         db_table = "ganado_finca"
+        verbose_name = "Finca"
+        verbose_name_plural = "Fincas"
 
     def __str__(self):
         return self.nombre
@@ -47,6 +49,8 @@ class GanadoLote(models.Model):
         managed = False
         db_table = "ganado_lote"
         unique_together = (("finca", "nombre"),)
+        verbose_name = "Lote"
+        verbose_name_plural = "Lotes"
 
     def __str__(self):
         return f"{self.nombre} - {self.finca.nombre}" if self.finca_id else self.nombre
@@ -60,6 +64,8 @@ class GanadoRaza(models.Model):
     class Meta:
         managed = False
         db_table = "ganado_raza"
+        verbose_name = "Raza"
+        verbose_name_plural = "Razas"
 
     def __str__(self):
         return self.raza
@@ -73,6 +79,8 @@ class GanadoColor(models.Model):
     class Meta:
         managed = False
         db_table = "ganado_color"
+        verbose_name = "Color"
+        verbose_name_plural = "Colores"
 
     def __str__(self):
         return self.color
@@ -93,6 +101,8 @@ class GanadoProductor(models.Model):
         managed = False
         db_table = "ganado_productor"
         unique_together = (("nombre", "apellido_paterno", "apellido_materno"),)
+        verbose_name = "Productor"
+        verbose_name_plural = "Productores"
 
     def __str__(self):
         parts = [self.nombre, self.apellido_paterno, self.apellido_materno]
@@ -109,6 +119,8 @@ class GanadoUpp(models.Model):
     class Meta:
         managed = False
         db_table = "ganado_upp"
+        verbose_name = "UPP"
+        verbose_name_plural = "UPPs"
 
     def __str__(self):
         return self.clave or f"UPP #{self.id}"
@@ -126,6 +138,8 @@ class GanadoRegistro(models.Model):
     class Meta:
         managed = False
         db_table = "ganado_registro"
+        verbose_name = "Registro"
+        verbose_name_plural = "Registros"
 
     def __str__(self):
         return self.id_bovino or f"Registro #{self.id}"
@@ -176,6 +190,8 @@ class GanadoAnimal(models.Model):
     class Meta:
         managed = False
         db_table = "ganado_animal"
+        verbose_name = "Animal"
+        verbose_name_plural = "Animales"
 
     def __str__(self):
         return self.id_interno or self.id_siniga or f"Animal #{self.id}"

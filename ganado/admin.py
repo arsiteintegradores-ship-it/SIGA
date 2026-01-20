@@ -26,9 +26,7 @@ from .utils import normalize_identifier
 
 admin.site.site_header = "SIGA - Administración"
 admin.site.site_title = "SIGA Admin"
-admin.site.index_title = (
-    "Captura guiada (recomendado): 1) Animal  2) Productores/UPP  3) Fincas  4) Lotes 5) Razas/Colores"
-)
+admin.site.index_title = ""
 
 # =========================
 # Filtros por rango (sin paquetes)
@@ -407,6 +405,10 @@ class GanadoAnimalAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self.fields["productor"].required = True
+        self.fields["raza"].required = True
+        self.fields["fecha_nacimiento"].required = True
+
         if self.instance and getattr(self.instance, "finca_id", None):
             self.fields["lote"].queryset = GanadoLote.objects.filter(finca_id=self.instance.finca_id)
         else:
@@ -417,6 +419,26 @@ class GanadoAnimalAdminForm(forms.ModelForm):
 
     def clean_id_siniga(self):
         return normalize_identifier(self.cleaned_data.get("id_siniga"))
+
+    def clean(self):
+        cleaned_data = super().clean()
+        qs = GanadoAnimal.objects.all()
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+
+        id_interno = cleaned_data.get("id_interno")
+        if id_interno and qs.filter(id_interno=id_interno).exists():
+            self.add_error("id_interno", "El ID interno ya existe.")
+
+        id_siniga = cleaned_data.get("id_siniga")
+        if id_siniga and qs.filter(id_siniga=id_siniga).exists():
+            self.add_error("id_siniga", "El ID Siniga ya existe.")
+
+        nombre_bov = cleaned_data.get("nombre_bov")
+        if nombre_bov and qs.filter(nombre_bov__iexact=nombre_bov).exists():
+            self.add_error("nombre_bov", "El nombre ya existe.")
+
+        return cleaned_data
 
 
 # =========================
@@ -485,9 +507,8 @@ class GanadoAnimalAdmin(admin.ModelAdmin):
     form = GanadoAnimalAdminForm
 
     list_display = (
-        "id",
         "id_interno",
-        "id_siniga",
+        "id_siniga_admin",
         "nombre_bov",
         "sexo",
         "fecha_nacimiento_fmt",
@@ -497,6 +518,7 @@ class GanadoAnimalAdmin(admin.ModelAdmin):
         "color",
         "finca",
         "lote",
+        "productor",
         "estado",
         "peso_nacimiento",
         "peso_destete",
@@ -570,6 +592,10 @@ class GanadoAnimalAdmin(admin.ModelAdmin):
     @admin.display(description="Fecha nacimiento", ordering="fecha_nacimiento")
     def fecha_nacimiento_fmt(self, obj):
         return obj.fecha_nacimiento.strftime("%d/%m/%Y") if obj.fecha_nacimiento else "—"
+
+    @admin.display(description="ID SINIGA", ordering="id_siniga")
+    def id_siniga_admin(self, obj):
+        return obj.id_siniga or "Sin Siniga"
 
     @admin.display(description="Edad (Años, Meses, Días)", ordering="fecha_nacimiento")
     def edad_admin(self, obj):
