@@ -5,6 +5,7 @@ from django import forms
 from django.contrib import admin
 from django.contrib import messages
 from django.contrib.admin.widgets import AdminDateWidget
+from django.db.models import Q
 from django.http import HttpResponse
 from django.utils import timezone
 
@@ -111,6 +112,19 @@ class PesoDesteteFilter(admin.SimpleListFilter):
             return queryset.filter(peso_destete__gte=250)
         a, b = val.split("-")
         return queryset.filter(peso_destete__gte=float(a), peso_destete__lt=float(b))
+
+
+class SinigaVacioFilter(admin.SimpleListFilter):
+    title = "By Siniga"
+    parameter_name = "siniga_vacio"
+
+    def lookups(self, request, model_admin):
+        return (("sin", "Sin Siniga"),)
+
+    def queryset(self, request, queryset):
+        if self.value() == "sin":
+            return queryset.filter(Q(id_siniga__isnull=True) | Q(id_siniga=""))
+        return queryset
 
 
 # =========================
@@ -230,7 +244,7 @@ def imprimir_reporte_animales_pdf(modeladmin, request, queryset):
         "Madre",
         "Estado",
     ]
-    min_widths = [55, 70, 110, 80, 35, 70, 190, 120, 170, 90, 90, 70]
+    min_widths = [55, 110, 110, 80, 35, 90, 190, 120, 170, 90, 90, 70]
     header_font = "Helvetica-Bold"
     header_size = 9
     body_font = "Helvetica"
@@ -410,6 +424,7 @@ class GanadoAnimalAdminForm(forms.ModelForm):
         self.fields["productor"].required = True
         self.fields["raza"].required = True
         self.fields["fecha_nacimiento"].required = True
+        self.fields["peso_nacimiento"].required = True
 
         if self.instance and getattr(self.instance, "finca_id", None):
             self.fields["lote"].queryset = GanadoLote.objects.filter(finca_id=self.instance.finca_id)
@@ -545,6 +560,7 @@ class GanadoAnimalAdmin(admin.ModelAdmin):
         "color",
         "finca",
         "lote",
+        SinigaVacioFilter,
         FechaNacimientoFilter,
         PesoNacimientoFilter,
         PesoDesteteFilter,
