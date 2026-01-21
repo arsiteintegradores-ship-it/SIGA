@@ -560,6 +560,7 @@ class GanadoAnimalAdmin(admin.ModelAdmin):
         "color",
         "finca",
         "lote",
+        "productor",
         SinigaVacioFilter,
         FechaNacimientoFilter,
         PesoNacimientoFilter,
