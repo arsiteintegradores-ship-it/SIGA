@@ -2,64 +2,214 @@
 {% load static %}
 
 {% block content %}
-<h1>Dashboard SIGA</h1>
+<style>
+  :root {
+    --siga-ink: #182028;
+    --siga-muted: #56616d;
+    --siga-accent: #c98b2c;
+    --siga-accent-dark: #996a1f;
+    --siga-surface: #ffffff;
+    --siga-border: #e3e6e9;
+    --siga-shadow: 0 8px 30px rgba(24, 32, 40, 0.08);
+    --siga-bg: #f3f5f7;
+  }
 
-<form method="get" style="margin: 12px 0; padding:12px; background:#fff; border:1px solid #ddd;">
-  <label>Finca:</label>
-  <select name="finca_id">
-    <option value="">Todas</option>
-    {% for f in fincas %}
-      <option value="{{ f.id }}" {% if selected.finca_id|add:"" == f.id|add:"" %}selected{% endif %}>{{ f.nombre }}</option>
-    {% endfor %}
-  </select>
+  .siga-dashboard {
+    font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+    color: var(--siga-ink);
+    background: radial-gradient(circle at top left, #ffffff 0%, #f1f2f4 45%, #edf0f3 100%);
+    padding: 18px;
+    border-radius: 12px;
+  }
 
-  <label style="margin-left:12px;">Lote:</label>
-  <select name="lote_id">
-    <option value="">Todos</option>
-    {% for l in lotes %}
-      <option value="{{ l.id }}" {% if selected.lote_id|add:"" == l.id|add:"" %}selected{% endif %}>{{ l.nombre }}</option>
-    {% endfor %}
-  </select>
+  .siga-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
 
-  <label style="margin-left:12px;">Estado:</label>
-  <select name="estado">
-    <option value="">Todos</option>
-    <option value="ACTIVO" {% if selected.estado == "ACTIVO" %}selected{% endif %}>ACTIVO</option>
-    <option value="VENDIDO" {% if selected.estado == "VENDIDO" %}selected{% endif %}>VENDIDO</option>
-    <option value="MUERTO" {% if selected.estado == "MUERTO" %}selected{% endif %}>MUERTO</option>
-    <option value="BAJA" {% if selected.estado == "BAJA" %}selected{% endif %}>BAJA</option>
-  </select>
+  .siga-hero h1 {
+    font-family: "IBM Plex Serif", "Georgia", serif;
+    font-size: 28px;
+    margin: 0;
+    letter-spacing: 0.4px;
+  }
 
-  <label style="margin-left:12px;">Sexo:</label>
-  <select name="sexo">
-    <option value="">Todos</option>
-    <option value="M" {% if selected.sexo == "M" %}selected{% endif %}>Macho</option>
-    <option value="H" {% if selected.sexo == "H" %}selected{% endif %}>Hembra</option>
-  </select>
+  .siga-hero p {
+    margin: 4px 0 0;
+    color: var(--siga-muted);
+  }
 
-  <button type="submit" class="button" style="margin-left:12px;">Aplicar</button>
-  <a class="button" href="/admin/dashboard/">Limpiar</a>
-</form>
+  .siga-filters {
+    background: var(--siga-surface);
+    border: 1px solid var(--siga-border);
+    border-radius: 12px;
+    padding: 14px;
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(4, minmax(200px, 1fr)) auto auto;
+    align-items: end;
+    box-shadow: var(--siga-shadow);
+  }
 
-<div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
-  <div style="background:#fff; border:1px solid #ddd; padding:12px;">
-    <h2>Animales por etapa</h2>
-    <canvas id="cEtapa"></canvas>
+  .siga-field label {
+    display: block;
+    font-size: 13.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #3c4651;
+    margin-bottom: 4px;
+  }
+
+  .siga-field select {
+    width: 100%;
+    border: 1px solid #cfd6dc;
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 16px;
+    background: #fff;
+    color: #182028;
+    box-shadow: 0 1px 2px rgba(24, 32, 40, 0.05);
+  }
+
+  .siga-actions {
+    display: flex;
+    gap: 10px;
+  }
+
+  .siga-actions .button {
+    border-radius: 999px;
+    padding: 8px 18px;
+    border: 1px solid var(--siga-accent);
+    background: var(--siga-accent);
+    color: #fff;
+  }
+
+  .siga-actions .button.secondary {
+    background: #fff;
+    color: var(--siga-accent-dark);
+    border-color: var(--siga-accent-dark);
+  }
+
+  .siga-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    margin-top: 18px;
+  }
+
+  .siga-card {
+    background: var(--siga-surface);
+    border: 1px solid var(--siga-border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    box-shadow: var(--siga-shadow);
+  }
+
+  .siga-card h2 {
+    font-size: 15px;
+    margin: 0 0 8px;
+    letter-spacing: 0.3px;
+  }
+
+  .siga-chart {
+    height: 240px;
+  }
+
+  @media (max-width: 1024px) {
+    .siga-filters {
+      grid-template-columns: repeat(2, minmax(160px, 1fr));
+    }
+
+    .siga-actions {
+      grid-column: span 2;
+      justify-content: flex-start;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .siga-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="siga-dashboard">
+  <div class="siga-hero">
+    <div>
+      <h1>Dashboard SIGA</h1>
+      <p>Resumen operativo de producción ganadera.</p>
+    </div>
   </div>
 
-  <div style="background:#fff; border:1px solid #ddd; padding:12px;">
-    <h2>Animales por estado</h2>
-    <canvas id="cEstado"></canvas>
-  </div>
+  <form method="get" class="siga-filters">
+    <div class="siga-field">
+      <label>Finca</label>
+      <select name="finca_id">
+        <option value="">Todas</option>
+        {% for f in fincas %}
+          <option value="{{ f.id }}" {% if selected.finca_id|add:"" == f.id|add:"" %}selected{% endif %}>{{ f.nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
 
-  <div style="background:#fff; border:1px solid #ddd; padding:12px;">
-    <h2>Promedio peso destete por finca</h2>
-    <canvas id="cPeso"></canvas>
-  </div>
+    <div class="siga-field">
+      <label>Lote</label>
+      <select name="lote_id">
+        <option value="">Todos</option>
+        {% for l in lotes %}
+          <option value="{{ l.id }}" {% if selected.lote_id|add:"" == l.id|add:"" %}selected{% endif %}>{{ l.nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
 
-  <div style="background:#fff; border:1px solid #ddd; padding:12px;">
-    <h2>Distribución edad (meses)</h2>
-    <canvas id="cEdad"></canvas>
+    <div class="siga-field">
+      <label>Estado</label>
+      <select name="estado">
+        <option value="">Todos</option>
+        <option value="ACTIVO" {% if selected.estado == "ACTIVO" %}selected{% endif %}>ACTIVO</option>
+        <option value="VENDIDO" {% if selected.estado == "VENDIDO" %}selected{% endif %}>VENDIDO</option>
+        <option value="MUERTO" {% if selected.estado == "MUERTO" %}selected{% endif %}>MUERTO</option>
+        <option value="BAJA" {% if selected.estado == "BAJA" %}selected{% endif %}>BAJA</option>
+      </select>
+    </div>
+
+    <div class="siga-field">
+      <label>Sexo</label>
+      <select name="sexo">
+        <option value="">Todos</option>
+        <option value="M" {% if selected.sexo == "M" %}selected{% endif %}>Macho</option>
+        <option value="H" {% if selected.sexo == "H" %}selected{% endif %}>Hembra</option>
+      </select>
+    </div>
+
+    <div class="siga-actions">
+      <button type="submit" class="button">Aplicar</button>
+      <a class="button secondary" href="/admin/dashboard/">Limpiar</a>
+    </div>
+  </form>
+
+  <div class="siga-grid">
+    <div class="siga-card">
+      <h2>Animales por etapa</h2>
+      <div class="siga-chart"><canvas id="cEtapa"></canvas></div>
+    </div>
+
+    <div class="siga-card">
+      <h2>Animales por estado</h2>
+      <div class="siga-chart"><canvas id="cEstado"></canvas></div>
+    </div>
+
+    <div class="siga-card">
+      <h2>Promedio peso destete por finca</h2>
+      <div class="siga-chart"><canvas id="cPeso"></canvas></div>
+    </div>
+
+    <div class="siga-card">
+      <h2>Distribución edad (meses)</h2>
+      <div class="siga-chart"><canvas id="cEdad"></canvas></div>
+    </div>
   </div>
 </div>
 
@@ -67,12 +217,72 @@
 <script>
   const data = {{ chart|safe }};
 
+  const palette = ["#c98b2c", "#386a5f", "#496a8c", "#b64e3d", "#6b5b95"];
+  const valueLabelsPlugin = {
+    id: "valueLabels",
+    afterDatasetsDraw(chart) {
+      const { ctx } = chart;
+      ctx.save();
+      ctx.font = "12px IBM Plex Sans, sans-serif";
+      chart.getDatasetMeta(0).data.forEach((bar, index) => {
+        const value = chart.data.datasets[0].data[index];
+        if (value === null || value === undefined) {
+          return;
+        }
+        const label = String(value);
+        const padding = 4;
+        const metrics = ctx.measureText(label);
+        const boxWidth = metrics.width + padding * 2;
+        const boxHeight = 18;
+        const boxX = bar.x - boxWidth / 2;
+        let boxY = bar.y - boxHeight - 8;
+        if (boxY < chart.chartArea.top + 2) {
+          boxY = bar.y + 6;
+        }
+        ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
+        ctx.strokeStyle = "rgba(24, 32, 40, 0.12)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(boxX, boxY, boxWidth, boxHeight, 6);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "#182028";
+        ctx.fillText(label, bar.x - metrics.width / 2, boxY + 12.5);
+      });
+      ctx.restore();
+    },
+  };
+
   function makeChart(id, labels, values, type="bar") {
     const ctx = document.getElementById(id);
     return new Chart(ctx, {
       type,
-      data: { labels, datasets: [{ label: id, data: values }] },
-      options: { responsive: true, plugins: { legend: { display: false } } }
+      data: {
+        labels,
+        datasets: [
+          {
+            label: id,
+            data: values,
+            backgroundColor: palette,
+            borderColor: "#b57b26",
+            borderWidth: 1.5,
+            borderRadius: 6,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: "#56616d" } },
+          y: {
+            grid: { color: "rgba(24, 32, 40, 0.08)" },
+            ticks: { color: "#56616d" },
+          },
+        },
+      },
+      plugins: [valueLabelsPlugin],
     });
   }
 
