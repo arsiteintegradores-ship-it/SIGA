@@ -11,3 +11,46 @@
   </a>
 </div>
 {% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+  #changelist-filter .filter h3 {
+    cursor: pointer;
+    position: relative;
+    padding-right: 16px;
+  }
+
+  #changelist-filter .filter h3::after {
+    content: ">";
+    position: absolute;
+    right: 0;
+    color: #6a7682;
+  }
+
+  #changelist-filter .filter:not(.siga-filter-collapsed) h3::after {
+    content: "v";
+  }
+
+  #changelist-filter .filter.siga-filter-collapsed ul {
+    display: none;
+  }
+</style>
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const filters = document.querySelectorAll("#changelist-filter .filter");
+    filters.forEach((filter) => {
+      filter.classList.add("siga-filter-collapsed");
+      const title = filter.querySelector("h3");
+      if (title) {
+        title.setAttribute("role", "button");
+        title.setAttribute("aria-expanded", "false");
+        title.addEventListener("click", () => {
+          const collapsed = filter.classList.toggle("siga-filter-collapsed");
+          title.setAttribute("aria-expanded", String(!collapsed));
+        });
+      }
+    });
+  });
+</script>
+{% endblock %}
