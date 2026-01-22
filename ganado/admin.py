@@ -89,31 +89,6 @@ class PesoNacimientoFilter(admin.SimpleListFilter):
         return queryset.filter(peso_nacimiento__gte=float(a), peso_nacimiento__lt=float(b))
 
 
-class PesoDesteteFilter(admin.SimpleListFilter):
-    title = "Peso destete (kg)"
-    parameter_name = "pd_rango"
-
-    def lookups(self, request, model_admin):
-        return (
-            ("0-150", "0 a 150"),
-            ("150-200", "150 a 200"),
-            ("200-250", "200 a 250"),
-            ("250+", "250+"),
-            ("null", "Sin dato"),
-        )
-
-    def queryset(self, request, queryset):
-        val = self.value()
-        if not val:
-            return queryset
-        if val == "null":
-            return queryset.filter(peso_destete__isnull=True)
-        if val == "250+":
-            return queryset.filter(peso_destete__gte=250)
-        a, b = val.split("-")
-        return queryset.filter(peso_destete__gte=float(a), peso_destete__lt=float(b))
-
-
 class SinigaVacioFilter(admin.SimpleListFilter):
     title = "By Siniga"
     parameter_name = "siniga_vacio"
@@ -126,6 +101,104 @@ class SinigaVacioFilter(admin.SimpleListFilter):
             return queryset.filter(Q(id_siniga__isnull=True) | Q(id_siniga=""))
         return queryset
 
+
+class EtapaDesarrolloFilter(admin.SimpleListFilter):
+    title = "Etapa"
+    parameter_name = "etapa"
+
+    def lookups(self, request, model_admin):
+        return (
+            ("lactantes", "Lactantes"),
+            ("crias", "Crías"),
+            ("vaquilla", "Vaquilla"),
+            ("novillo", "Novillo"),
+            ("vaca", "Vaca"),
+            ("semental", "Semental"),
+            ("sin_fecha", "Sin fecha"),
+        )
+
+    def queryset(self, request, queryset):
+        val = self.value()
+        if not val:
+            return queryset
+
+        today = timezone.localdate()
+        if val == "sin_fecha":
+            return queryset.filter(fecha_nacimiento__isnull=True)
+
+        if val == "lactantes":
+            return queryset.filter(
+                fecha_nacimiento__gte=today - timedelta(days=210),
+                fecha_nacimiento__lte=today - timedelta(days=1),
+            )
+        if val == "crias":
+            return queryset.filter(
+                fecha_nacimiento__gte=today - timedelta(days=365),
+                fecha_nacimiento__lte=today - timedelta(days=211),
+            )
+        if val == "vaquilla":
+            return queryset.filter(
+                fecha_nacimiento__gte=today - timedelta(days=730),
+                fecha_nacimiento__lte=today - timedelta(days=366),
+                sexo="H",
+            )
+        if val == "novillo":
+            return queryset.filter(
+                fecha_nacimiento__gte=today - timedelta(days=730),
+                fecha_nacimiento__lte=today - timedelta(days=366),
+                sexo="M",
+            )
+        if val == "vaca":
+            return queryset.filter(
+                fecha_nacimiento__lte=today - timedelta(days=731),
+                sexo="H",
+            )
+        if val == "semental":
+            return queryset.filter(
+                fecha_nacimiento__lte=today - timedelta(days=731),
+                sexo="M",
+            )
+        return queryset
+
+
+class EdadRangoFilter(admin.SimpleListFilter):
+    title = "Edad"
+    parameter_name = "edad_rango"
+
+    def lookups(self, request, model_admin):
+        return (
+            ("0-3", "0-3 meses"),
+            ("3-6", "3-6 meses"),
+            ("6-8", "6-8 meses"),
+            ("8-12", "8-12 meses"),
+            ("12+", "12+ meses"),
+            ("sin_fecha", "Sin fecha"),
+        )
+
+    def queryset(self, request, queryset):
+        val = self.value()
+        if not val:
+            return queryset
+
+        today = timezone.localdate()
+        if val == "sin_fecha":
+            return queryset.filter(fecha_nacimiento__isnull=True)
+
+        ranges = {
+            "0-3": (0, 90),
+            "3-6": (91, 180),
+            "6-8": (181, 240),
+            "8-12": (241, 365),
+        }
+        if val in ranges:
+            min_days, max_days = ranges[val]
+            return queryset.filter(
+                fecha_nacimiento__gte=today - timedelta(days=max_days),
+                fecha_nacimiento__lte=today - timedelta(days=min_days),
+            )
+        if val == "12+":
+            return queryset.filter(fecha_nacimiento__lte=today - timedelta(days=366))
+        return queryset
 
 # =========================
 # Exportar a Excel (XLSX)
@@ -153,7 +226,7 @@ def export_animales_xlsx(modeladmin, request, queryset):
         "Raza", "Color", "Finca", "Lote", "Estado",
         "Fecha nac",
         "Edad (Años, Meses, Días)", "Etapa de desarrollo",
-        "Peso nac", "Peso destete",
+        "Peso nac",
         "Padre", "Madre", "Productor", "UPP", "Notas",
         "Creado", "Actualizado",
     ]
@@ -197,7 +270,6 @@ def export_animales_xlsx(modeladmin, request, queryset):
             edad_txt,
             etapa_txt,
             float(a.peso_nacimiento) if a.peso_nacimiento is not None else "",
-            float(a.peso_destete) if a.peso_destete is not None else "",
             str(a.padre) if a.padre_id else "",
             str(a.madre) if a.madre_id else "",
             str(a.productor) if a.productor_id else "",
@@ -538,7 +610,6 @@ class GanadoAnimalAdmin(admin.ModelAdmin):
         "productor",
         "estado",
         "peso_nacimiento",
-        "peso_destete",
         "created_at",
         "updated_at",
     )
@@ -562,9 +633,10 @@ class GanadoAnimalAdmin(admin.ModelAdmin):
         "lote",
         "productor",
         SinigaVacioFilter,
+        EtapaDesarrolloFilter,
+        EdadRangoFilter,
         FechaNacimientoFilter,
         PesoNacimientoFilter,
-        PesoDesteteFilter,
     )
 
     ordering = ("-id",)
@@ -602,7 +674,7 @@ class GanadoAnimalAdmin(admin.ModelAdmin):
         ("Identificación", {"fields": ("id_interno", "id_siniga", "nombre_bov", "sexo")}),
         ("Origen / Ubicación", {"fields": ("finca", "lote", "productor", "upp")}),
         ("Características", {"fields": ("raza", "color", "estado", "notas")}),
-        ("Pesos / Fechas", {"fields": ("fecha_nacimiento", "fecha_nacimiento_fmt", "peso_nacimiento", "peso_destete")}),
+        ("Pesos / Fechas", {"fields": ("fecha_nacimiento", "fecha_nacimiento_fmt", "peso_nacimiento")}),
         ("Edad / Etapa (calculado)", {"fields": ("edad_admin", "etapa_admin")}),
         ("Genealogía", {"fields": ("padre", "madre", "registro")}),
         ("Sistema", {"fields": ("created_at", "updated_at")}),
@@ -637,18 +709,6 @@ class GanadoAnimalAdmin(admin.ModelAdmin):
                     warnings.append("Advertencia: peso nacimiento bajo (<28 kg) para hembra.")
                 elif obj.peso_nacimiento > Decimal("42"):
                     warnings.append("Advertencia: peso nacimiento alto (>42 kg) para hembra.")
-
-        if obj.sexo and obj.peso_destete is not None:
-            if obj.sexo == "M":
-                if obj.peso_destete < Decimal("160"):
-                    warnings.append("Advertencia: peso destete bajo (<160 kg) para macho.")
-                elif obj.peso_destete > Decimal("260"):
-                    warnings.append("Advertencia: peso destete alto (>260 kg) para macho.")
-            elif obj.sexo == "H":
-                if obj.peso_destete < Decimal("150"):
-                    warnings.append("Advertencia: peso destete bajo (<150 kg) para hembra.")
-                elif obj.peso_destete > Decimal("240"):
-                    warnings.append("Advertencia: peso destete alto (>240 kg) para hembra.")
 
         return warnings
 
